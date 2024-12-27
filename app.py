@@ -1,16 +1,19 @@
+# !pip install streamlit requests beautifulsoup4 pillow
+
 import streamlit as st
 from PIL import Image
+import io
 import os
 import requests
 from bs4 import BeautifulSoup
 
-def create_pdf_from_ipgs_flipbook_url(url, pdf_filename, headers=None):
+def create_pdf_from_ipgs_flipbook_url(url, headers=None):
   """
-  Creates a PDF from images extracted from a URL with the 'ipgs-flipbook' class.
+  Creates a PDF from images extracted from a URL with the 'ipgs-flipbook' class,
+  using chunks to download images and in-memory buffer for the PDF.
 
   Args:
     url: The URL of the webpage containing the flipbook.
-    pdf_filename: The name of the PDF file to be created.
     headers: (Optional) Dictionary of headers to include in the request.
   """
 
@@ -18,7 +21,6 @@ def create_pdf_from_ipgs_flipbook_url(url, pdf_filename, headers=None):
     # Fetch the webpage content with custom headers
     response = requests.get(url, headers=headers)
     response.raise_for_status()  # Raise an exception for bad status codes
-    print(response.content)
 
     soup = BeautifulSoup(response.content, 'html.parser')
 
@@ -30,33 +32,54 @@ def create_pdf_from_ipgs_flipbook_url(url, pdf_filename, headers=None):
 
     # Extract image URLs from the data-ipgs-image attributes
     image_urls = [img['data-ipgs-image'] for img in flipbook_div.find_all('div', attrs={'data-ipgs-image': True})]
+    pdf_filename = '_'.join(image_urls[0].split('/')[-1].split('_')[:-2]) + '.pdf'
 
     if not image_urls:
       st.error("No images found in the 'ipgs-flipbook' element.")
       return
 
-    # Download and open images using Pillow
+    # Download and open images using Pillow with chunks
     images = []
     for image_url in image_urls:
       try:
         img_response = requests.get(image_url, stream=True, headers=headers)
         img_response.raise_for_status()
-        img = Image.open(img_response.raw)
+
+        # Use chunks to download the image
+        img_data = io.BytesIO()
+        for chunk in img_response.iter_content(chunk_size=8192):
+          img_data.write(chunk)
+        img_data.seek(0)
+
+        img = Image.open(img_data)
         images.append(img)
+
       except Exception as e:
         st.warning(f"Failed to download or open image from {image_url}: {e}")
 
-    # Save images as a PDF
+    # Save images to PDF using in-memory buffer
     if images:
-      images[0].save(pdf_filename, "PDF", resolution=100.0, save_all=True, append_images=images[1:])
+      pdf_buffer = io.BytesIO()
+      images[0].save(pdf_buffer, "PDF", resolution=100.0, save_all=True, append_images=images[1:])
+
+      # Provide a download button for the PDF
+      st.download_button(
+          label="Download PDF",
+          data=pdf_buffer.getvalue(),
+          file_name=pdf_filename,
+          mime="application/pdf",
+      )
       st.success(f"PDF created successfully: {pdf_filename}")
+
     else:
       st.error("No images successfully downloaded to create PDF.")
 
   except requests.exceptions.RequestException as e:
     st.error(f"Error fetching webpage: {e}")
 
-# Streamlit app
+
+# --- Streamlit app ---
+
 st.title("IPGS Flipbook to PDF Converter")
 
 url = st.text_input("Enter the URL of the webpage containing the flipbook:")
@@ -82,10 +105,6 @@ headers = {
 
 if st.button("Create PDF"):
   if url:
-    create_pdf_from_ipgs_flipbook_url(url, "output.pdf", headers=headers)
-
-    # Provide a download link for the PDF
-    with open("output.pdf", "rb") as pdf_file:
-      st.download_button("Download PDF", data=pdf_file, file_name="output.pdf")
+    create_pdf_from_ipgs_flipbook_url(url, headers=headers)
   else:
     st.warning("Please enter a URL.")
