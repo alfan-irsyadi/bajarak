@@ -18,6 +18,7 @@ def create_pdf_from_ipgs_flipbook_url(url, pdf_filename, headers=None):
     # Fetch the webpage content with custom headers
     response = requests.get(url, headers=headers)
     response.raise_for_status()  # Raise an exception for bad status codes
+    print(response.content)
 
     soup = BeautifulSoup(response.content, 'html.parser')
 
@@ -28,7 +29,7 @@ def create_pdf_from_ipgs_flipbook_url(url, pdf_filename, headers=None):
       return
 
     # Extract image URLs from the data-ipgs-image attributes
-    image_urls = [img['data-ipgs-image'] for img in flipbook_div.find_all('img', attrs={'data-ipgs-image': True})]
+    image_urls = [img['data-ipgs-image'] for img in flipbook_div.find_all('div', attrs={'data-ipgs-image': True})]
 
     if not image_urls:
       st.error("No images found in the 'ipgs-flipbook' element.")
