@@ -80,8 +80,8 @@ def create_pdf_from_ipgs_flipbook_url(url, headers=None):
 
 # --- Streamlit app ---
 
-st.title("IPGS Flipbook to PDF Converter")
 
+st.title("Bajarak Downloader")
 url = st.text_input("Enter the URL of the webpage containing the flipbook:")
 
 # Define the headers from the curl request
